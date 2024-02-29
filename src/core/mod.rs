@@ -79,11 +79,7 @@ impl ParameterEstimation {
                         .iter()
                         .sum::<f64>()
                         .sqrt(); 
-                    /*let error = 
-                        errors
-                        .iter()
-                        .sum::<f64>()
-                        .sqrt();*/
+
                     return error;
                 } ){                    
                     Ok(c) => { println!("The best individual is {:?}", c); self.best_solution = c.get_values(); },

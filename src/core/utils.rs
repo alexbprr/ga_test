@@ -11,7 +11,6 @@ pub fn to_disk<P: AsRef<Path>>(path: &Path, data: Vec<String>) -> anyhow::Result
         Ok(f) => f,
         Err(e) => return Err(e.into()),
     };
-    //let writer: BufWriter<File> = BufWriter::new(file);
     for v in &data{                                                                                                                                                                  
         write!(file, "{ }", v)?;                                                                                                                             
     }

@@ -103,9 +103,9 @@ impl GA {
 
     fn select_parents(&self) -> (&Chromosome,&Chromosome){ 
         let upper_bound: f64 = self.population
-            .iter()
-            .map(|c| c.fitness)
-            .sum();
+                                    .iter()
+                                    .map(|c| c.fitness)
+                                    .sum();
         let mut rng = rand::thread_rng();
         let p_size: usize = self.population.len();
 
@@ -155,8 +155,6 @@ impl GA {
         
         let (left_child_1, right_child_2) = parents.0.values.clone().split_inplace_at(number_of_chromosomes as usize);
         let (right_child_1, left_child_2 ) = parents.1.values.clone().split_inplace_at(number_of_chromosomes as usize);
-        //println!("length of left_child_1: {:?}", left_child_1.len());
-        //println!("length of left_child_2: {:?}", left_child_2.len());
 
         let mut left_vec: Vec<f64> = left_child_1.into();
         left_vec.append(&mut left_child_2.into());
@@ -199,7 +197,6 @@ impl GA {
         for j in 0..self.population.len() {
             self.population[j].fitness = fitness_function(&self.population[j].values);
         }
-        //println!("Initial population: {:#?}", self.population);
 
         let mut i: usize = 0;
         let mut solutions: Vec<String> = vec![];
@@ -208,7 +205,9 @@ impl GA {
             println!("iteration {:?}: ", i);
             let mut count: usize = 0;
             let mut p_size: usize = self.population.len();
+
             for j in 0..p_size/5 { 
+
                 let parents: (&Chromosome,&Chromosome) = self.select_parents();                
                 let mut new_individuals: (Chromosome,Chromosome) = self.crossover(parents);
                 new_individuals.0.fitness = fitness_function(&new_individuals.0.values);
@@ -222,16 +221,16 @@ impl GA {
 
             //mutate and calculate fitness of each individual of new population
             for j in 0..p_size {
+                
                 self.population[j].mutation(self.mutation_rate);
                 self.population[j].fitness = fitness_function(&self.population[j].values);
-                //println!("----------------- {:?}", self.population[j].fitness); 
+                
                 if self.verify_if_valid(&self.population[j]) == false {
                     self.population.remove(j);
                 }
             }
             
             quicksort_by(&mut self.population, GA::compare);
-            //println!("current population: {:#?}", self.population);
 
             //get the best individual
             if self.minimization {
