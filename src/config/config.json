@@ -1,0 +1,39 @@
+{
+    "metadata": {
+        "name": "Parameter estimation",
+        "start_time": 0.0,
+        "delta_time": 0.05,
+        "end_time": 10.0
+    },
+    "arguments": [
+        {
+            "name": "S",
+            "value": 1000.0
+        },
+        {
+            "name": "I",
+            "value": 10.0
+        },
+        {
+            "name": "R",
+            "value": 0.0
+        }
+    ],    
+    "bounds": [
+        {
+            "name": "alpha",
+            "min": 0.001,
+            "max": 0.1 
+        },
+        {
+            "name": "beta",
+            "min": 0.001,
+            "max": 0.1 
+        },
+        {
+            "name": "gamma",
+            "min": 0.001,
+            "max": 0.1 
+        }
+    ] 
+}

@@ -1,6 +1,9 @@
+use mexprp::Context;
 use ode_solvers::dop853::*;
 use ode_solvers::*;
 use std::{fs::File, io::{BufWriter, Write}, path::Path};
+
+use super::model::OdeSystem;
 
 pub type State = DVector<f64>;
 
@@ -9,6 +12,17 @@ pub struct OdeProblem {
 }
 
 impl OdeProblem {
+
+    pub fn create_context(ode_system: &OdeSystem) -> Context<f64> {
+        let mut context: Context<f64> = Context::new();
+        for (name, value) in ode_system.values.iter(){
+            context.set_var(name, value.clone());
+        }
+        
+
+        return context
+    }
+
     pub fn solve(t_ini: f64, t_final: f64, dt: f64, y0: State, constants: State) -> Vec<State> {
         // Create the structure containing the problem specific constant and equations.
         let system: OdeProblem = OdeProblem {
@@ -23,9 +37,6 @@ impl OdeProblem {
         match res {
             Ok(stats) => {
                 let result = stepper.y_out().to_vec();                
-                //let path = Path::new("./src/tests/predator_prey.dat");
-                //Self::save(stepper.x_out(), stepper.y_out(), path); 
-                //println!("Results saved in: {:?}", path);
                 return result;
             }
             Err(e) => {println!("An error occured: {}", e); return vec![]; } ,
@@ -59,15 +70,18 @@ impl OdeProblem {
 
 impl ode_solvers::System<f64, State> for OdeProblem {
     fn system(&self, _t: f64, y: &State, dy: &mut State) {
+        
         let alpha = self.constants[0];
         let gamma = self.constants[1];
         let beta = self.constants[2];
         let s = y[0];
         let i = y[1];
         let r = y[2];
+
         dy[0] = -alpha*s*i + beta*r;
         dy[1] = alpha*s*i - gamma*i;
         dy[2] = gamma*i - beta*r;
+        
     }
 }
 

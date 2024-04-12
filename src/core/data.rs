@@ -28,14 +28,14 @@ impl CSVData {
         let mut populations: Vec<Vec<f64>> = (0..n_cols).map(|_| Vec::new()).collect();
 
         for record in rdr.records() {
-            println!("record = {:?}", record);
+            //println!("record = {:?}", record);
             record?
                 .into_iter()
                 .map(|v| v.trim())
                 .map(|v| v.parse())
                 .zip(populations.iter_mut())
                 .try_for_each(|(value, population)| {
-                    println!("value: {:?}", value);
+                    //println!("value: {:?}", value);
                     population.push(value?);
                     Result::<(), std::num::ParseFloatError>::Ok(())
                 })
