@@ -8,13 +8,16 @@ pub struct Metadata {
     pub start_time: f64,
     pub delta_time: f64,
     pub end_time: f64,
+    pub population_size: usize,
+    pub crossover_rate: f64,
+    pub mutation_rate: f64,
 }
 
 //initial condition 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Argument {
-    name: String,
-    value: f64,
+    pub name: String,
+    pub value: f64,
 }
 
 impl Argument {
@@ -27,11 +30,11 @@ impl Argument {
 }
 
 //parameters to be adjusted 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Bound {
-    name: String,
-    min: f64,
-    max: f64,
+    pub name: String,
+    pub min: f64,
+    pub max: f64,
 }
 
 impl Bound {
@@ -44,13 +47,12 @@ impl Bound {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct ConfigData {
     pub metadata: Metadata,
-    pub populations: Vec<String>,
-    pub parameters: Vec<String>,
-    pub arguments: Vec<Argument>,
+    pub arguments: Vec<Argument>, //manter o vetor ordenado 
     pub bounds: Vec<Bound>,
+    //pub populations_to_adjust: Vec<String>
 }
 
 pub fn save_json<P: AsRef<Path>>(data: ConfigData, path: P) -> anyhow::Result<(),Error> {

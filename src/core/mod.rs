@@ -1,102 +1,122 @@
 mod ga;
 mod utils;
-mod data;
-mod ode_solver;
+mod csvdata;
 pub mod json;
 pub mod model;
 
-use std::fs::File;
+use std::{collections::BTreeMap, fs::File};
 use ode_solvers::DVector;
-use self::{data::CSVData, ga::GA, ode_solver::{OdeProblem, State}};
+use self::{csvdata::CSVData, ga::GA, json::{Bound, ConfigData}, model::{OdeSystem, State}};
+/* Objective: to find the parameter values that better adjust the set of experimental data. */
 
-/*
-    Objective: to find the parameter values that better adjust the set of experimental data. 
-*/
-
+#[derive(Debug,Clone)]
 pub struct ParameterEstimation {
     ga: GA,
     best_solution: Vec<f64>,
     data_file: String,
-    num_of_params: usize, //number of parameters to be adjusted 
-    bounds: Vec<(f64,f64)>,    
+    config_data: ConfigData, 
+    max_num_iterations: usize,
 }
 
 impl ParameterEstimation {
 
-    pub fn new(file_name: String, n_params: usize, bounds: Vec<(f64,f64)>) -> Self {
+    pub fn new(file_name: String, config_data: ConfigData, max_iter: usize) -> Self {
         Self {
             ga: GA::default(),
             best_solution: vec![],
             data_file: file_name,
-            num_of_params: n_params,
-            bounds: bounds,
+            config_data: config_data,
+            max_num_iterations: max_iter,
         }
     }
-
-    pub fn estimate_parameters(&mut self, p_size: usize, mut_rate: f64, cross_rate: f64){
+    //TO DO: create a thread to optimize the parameters values 
+    //the config input file can not be changed during execution of this ga instance
+                
+    pub fn estimate_parameters(&mut self, ode_system: &mut OdeSystem){
         
         match CSVData::load_data(File::open(self.data_file.clone()).unwrap()){
-
             Ok(csv_data) => {
-                        
-                self.ga = GA::new(p_size, mut_rate, cross_rate, self.bounds.clone(),
-                            true);
+                
+                let mut bounds: BTreeMap<String,Bound> = BTreeMap::new();
+                for bound in self.config_data.bounds.iter() {
+                    bounds.insert(bound.name.clone(), bound.clone());
+                }
 
-                self.ga.generate_random_population(p_size, self.num_of_params);
+                self.ga = GA::new(
+                    self.max_num_iterations, 
+                    self.config_data.metadata.mutation_rate, 
+                    self.config_data.metadata.crossover_rate, 
+                    self.config_data.bounds.clone(),
+                    true
+                );
 
-                let n_max: usize = csv_data.labels.len(); //number of available population data 
+                self.ga.generate_random_population(
+                    self.config_data.metadata.population_size, 
+                    self.config_data.bounds.len()
+                );
 
+                let y: State = State::from_vec(ode_system.equations.keys()
+                            .map(|k| ode_system.get_argument_value(k.to_string())).collect());
+                
+                let mut errors: Vec<f64> = vec![0.0; csv_data.labels.len()];
+                let mut sums: Vec<f64> = vec![0.0; csv_data.labels.len()];
+                sums[1] = 1.0;
+                
                 match self.ga.optimize( |values: &Vec<f64>| {
+
+                    bounds.iter()
+                        .zip(values.iter())
+                        .for_each(|v| {
+                            ode_system.context.set_var(v.0.0, *v.1);
+                        });
+
+                    //println!("context: {:#?}", ode_system.context);                                        
                     
-                    let t_ini = 0.0;
-                    let t_final = 50.0;
-                    let dt = 0.01;
-                    let y0 = State::from(vec![1000.0,5.0,0.0]);                    
-                    let ode_result: Vec<DVector<f64>> = OdeProblem::solve(t_ini, t_final, dt, y0, 
-                                State::from((*values).clone()));
+                    let ode_result: Vec<DVector<f64>> = ode_system.solve(y.clone());
                     
-                    let mut t: f64 = t_ini;
                     let mut index: usize = 0;
-                    let mut errors: Vec<f64> = vec![0.0; n_max];
-                    let mut sums: Vec<f64> = vec![0.0; n_max];
-                    
-                    for ode_values in ode_result.iter(){
-                        
-                        match csv_data.time.get(index){
+                    let mut ode_index: usize = 0;
+                    let mut pop_index: usize = 0;
+                    let mut t: f64 = self.config_data.metadata.start_time;
 
-                            Some(time) => {
-                                if (t - time).abs() < 1e-08 {
-                                    for j in 0..n_max {
-                                        let data: f64 = csv_data.lines[j][index];
-                                        errors[j] += (data - ode_values[j])*(data - ode_values[j]);
-                                        sums[j] += data*data;
-                                    } 
-                                    index += 1;
-                                }                                
-                            },
-                            None => break,
-                        }                        
+                    while t < self.config_data.metadata.end_time {
+                        let x = 10.0_f64;
+                        if index == csv_data.time.len() {
+                            break;
+                        }
+                        if  (t - csv_data.time[index]).abs() < x.powf(-self.config_data.metadata.delta_time/10.0) {
 
-                        t += dt;
+                            let data: f64 = csv_data.lines[1][index];
+                            let dif = ode_result[ode_index][pop_index] - data;
+                            
+                            errors[pop_index] += dif*dif;
+                            sums[pop_index] += data*data;
+
+                            index += 1;                            
+                        }
+
+                        t += self.config_data.metadata.delta_time;
+                        ode_index += 1;
+                    }
+
+                    let mut id_sum: usize = 0;
+                    let mut sum: f64 = 0.0;
+
+                    for err in errors.iter(){                        
+                        sum += err/sums[id_sum];
+                        if sum.is_nan(){
+                            return 1000.0;
+                        }
+                        id_sum += 1;
                     }
                     
-                    let error = 
-                        errors
-                        .iter()
-                        .zip(sums.iter())
-                        .map(|v: (&f64, &f64)| v.0/v.1)                        
-                        .collect::<Vec<f64>>()
-                        .iter()
-                        .sum::<f64>()
-                        .sqrt(); 
-
-                    return error;
+                    return sum.sqrt();
                 } ){                    
                     Ok(c) => { println!("The best individual is {:?}", c); self.best_solution = c.get_values(); },
-                    Err(e) => println!("An error ocurred {:?}", e),
+                    Err(e) => println!("An error ocurred during the optimization: {:?}", e),
                 }                    
             },
-            Err(e) => println!("An error ocurred: {:?}", e),
+            Err(e) => println!("An error ocurred on reading the CSV file: {:?}", e),
         }
 
     }

@@ -1,93 +1,133 @@
-use std::collections::{BTreeMap, HashMap};
+use std::{cell::RefCell, collections::BTreeMap};
 use mexprp::{Answer, Context, Expression};
 use ode_solvers::dop853::*;
 use ode_solvers::*;
 use std::{fs::File, io::{BufWriter, Write}, path::Path};
 
+use super::json::ConfigData;
+
 pub type State = DVector<f64>;
 
-//ODE structure for the real time Rust solver 
 #[derive(Debug, Clone)]
-pub struct OdeEquation {
-    name: String,
-    text: String, 
-    expressions: Vec<String>,
-    value: f64,
+pub struct OdeSystem {
+    pub equations: BTreeMap<String,(Expression<f64>, f64)>,
+    pub context: Context<f64>,
+    pub config_data: ConfigData,
 }
 
-impl OdeEquation {
-    pub fn new(name: String, text: String) -> Self {
+impl OdeSystem {
+    pub fn new(cfg: ConfigData) -> Self{
         Self {
-            name: name,
-            text: text,
-            expressions: vec![],
-            value: 0.0,
+            equations: BTreeMap::new(),
+            context: Context::new(),
+            config_data: cfg,
+        }
+    }
+
+    pub fn get_argument_value(&self, name: String) -> f64{
+        for arg in self.config_data.arguments.iter() {
+            if arg.name == name {
+                return arg.value
+            }        
+        }
+        return 0.0
+    }    
+    
+    pub fn solve(&self, y: State) -> Vec<State> {
+    
+        let mut solver = 
+                Dop853::new(
+                    self.clone(), 
+                    self.config_data.metadata.start_time, 
+                    self.config_data.metadata.end_time, 
+                    self.config_data.metadata.delta_time, 
+                    y, 
+                    1.0e-8, 
+                    1.0e-8);
+        
+        match solver.integrate() {
+            Ok(_stats) => {
+                return solver.y_out().to_vec();
+            }
+            Err(e) => {
+                println!("An error occured: {}", e);
+                return vec![]; 
+            },
+        }
+    }
+
+    pub fn update_context(&self, y: &State) {
+
+        let equations_ref: RefCell<BTreeMap<String,(Expression<f64>, f64)>> = 
+                RefCell::new(self.equations.to_owned());                
+        let mut eqs = equations_ref.borrow_mut();
+
+        let context_ref: RefCell<Context<f64>> = RefCell::new(self.context.to_owned());
+        let mut context_mut = context_ref.borrow_mut();
+
+        eqs.values_mut()
+                .zip(y.iter())
+                .for_each(|(current_value, new_value)| 
+                    (*current_value).1 = *new_value);
+        
+        for (name, equation) in eqs.iter(){
+            context_mut.set_var(name, equation.1);
+        }
+
+        for equation in eqs.values_mut(){
+            equation.0.ctx = context_mut.clone();
         }
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct OdeSystem {
-    pub equations: BTreeMap<String,OdeEquation>,
-    pub values: BTreeMap<String,f64>, 
-    pub map_index: HashMap<usize,String>,
-}
+pub fn create_ode_system(input: String, config_data: &ConfigData) -> OdeSystem {
+        
+    let mut ode_system = OdeSystem::new(config_data.clone());
 
-impl OdeSystem {
-    pub fn new() -> Self{
-        Self {
-            equations: BTreeMap::new(),
-            values: BTreeMap::new(),
-            map_index: HashMap::new(),
-        }
-    }        
-}
+    for arg in config_data.arguments.iter(){
+        ode_system.context.set_var(&arg.name, arg.value);
+    }
+    
+    let lines = input.split("\n").collect::<Vec<_>>(); //to do: testar trim 
 
-pub fn create_ode_system(input: String) -> OdeSystem{
-    let mut ode_system = OdeSystem::new();
-
-    let lines = input.trim().split("\n").collect::<Vec<_>>();
-
-    let mut index = 0;
-
-    for line in lines {   
-
-        let new_line = line.split("=")
+    for line in lines {
+        let new_line = 
+                line
+                    .trim()
+                    .split('=')
                     .filter(|&s| !s.is_empty())
                     .collect::<Vec<_>>();
-        let population = new_line[0].trim();
-        let equation = new_line[1].trim();
+                
+        if new_line.len() == 2 {
 
-        ode_system.map_index.insert(index, population.to_string());
-        
-        let expressions = equation.split("+")
-                    .filter(|&s| !s.is_empty())
-                    .collect::<Vec<_>>();                    
+            let population = new_line[0].trim().to_string();            
 
-        let mut ode = OdeEquation::new(population.to_string(), equation.to_string());
-        ode.expressions = expressions.iter().map(|&s| s.to_string()).collect::<Vec<String>>();
-
-        ode_system.equations.insert(population.to_string(), ode);
-
-        index += 1;
+            let ode_rhs: Expression<f64> = Expression::parse_ctx(&new_line[1].trim(), 
+                            ode_system.context.clone()).unwrap();
+            ode_system.equations.insert(population.clone(), 
+                    (ode_rhs, ode_system.get_argument_value(population)));
+        }
     }
 
     return ode_system
 }
 
-pub fn solve(system: OdeSystem, t_ini: f64, t_final: f64, dt: f64, y0: State) -> Vec<State> {
-    
-    let mut stepper = 
-                Dop853::new(system, t_ini, t_final, dt, y0, 1.0e-8, 1.0e-8);
-    let res = stepper.integrate();
+impl ode_solvers::System<f64, State> for OdeSystem {
 
-    match res {
-        Ok(stats) => {
-            let result = stepper.y_out().to_vec();                
-            return result;
+    fn system(&self, _t: f64, y: &State, dydt: &mut State) {
+        
+        self.update_context(y);
+
+        let mut i: usize = 0;
+        for (equation, _value) in self.equations.values() {
+
+            if let Ok(Answer::Single(expr_value)) =  equation.eval(){
+                dydt[i] = expr_value;
+            }
+            i += 1;
         }
-        Err(e) => {println!("An error occured: {}", e); return vec![]; } ,
-    }        
+
+    }
 }
 
 pub fn save(times: &Vec<f64>, states: &Vec<State>, filename: &Path) {
@@ -101,7 +141,7 @@ pub fn save(times: &Vec<f64>, states: &Vec<State>, filename: &Path) {
     };
     let mut buf = BufWriter::new(file);
 
-    // Write time and state vector in a csv format
+    // Write time and state vector in csv format
     for (i, state) in states.iter().enumerate() {
         buf.write_fmt(format_args!("{:.6}", times[i])).unwrap();
         for val in state.iter() {
@@ -111,47 +151,5 @@ pub fn save(times: &Vec<f64>, states: &Vec<State>, filename: &Path) {
     }
     if let Err(e) = buf.flush() {
         println!("Could not write to file. Error: {:?}", e);
-    }
-}
-
-pub fn create_context(values: BTreeMap<String,f64>) -> Context<f64> {
-    let mut context: Context<f64> = Context::new();
-    
-    for (name, value) in values.iter(){
-        context.set_var(name, value.clone());
-    }
-
-    return context
-}
-
-impl ode_solvers::System<f64, State> for OdeSystem {
-
-    fn system(&self, _t: f64, y: &State, dydt: &mut State) {
-
-        let mut values = self.values.clone();
-        let mut id: usize = 0;
-
-        for new_value in y.iter() {
-            if let Some(name) = self.map_index.get(&id){
-                let value = values.get_mut(name).unwrap();
-                *value = *new_value;
-            }
-            id += 1;
-        }
-        
-        let context = create_context(values);
-        println!("context = {:#?}", context);
-
-        //to do: percorrer o vetor de equações (na ordem dos índices) para pegar o texto das expressões 
-        for id in 0..self.equations.len() {
-            if let Some(name) = self.map_index.get(&id){
-                let expr: String = self.equations.get(name).unwrap().text.clone();
-                let math_expr = Expression::parse_ctx(&expr, context.clone()).unwrap();
-                let res: Result<mexprp::Answer<f64>, mexprp::MathError> = math_expr.eval();
-                if let Ok(Answer::Single(expr_value)) = res {
-                    dydt[id] = expr_value;
-                }
-            }         
-        }
     }
 }

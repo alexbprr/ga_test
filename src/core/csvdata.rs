@@ -46,6 +46,8 @@ impl CSVData {
         data.lines = populations;
         data.labels.remove(0);
 
+        //to do: ordering data using the labels 
+
         Ok(data)
     }
 

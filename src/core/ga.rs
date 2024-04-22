@@ -8,21 +8,13 @@ use vecshard::ShardExt;
 use std::fmt;
 use crate::core::utils;
 
+use super::json::Bound;
+
 #[derive(Debug,Clone,Default)]
 pub struct Chromosome {
     values: Vec<f64>, //genes 
     pub fitness: f64,
     mutation_percentage: f64,
-}
-
-#[derive(Debug,Clone,Default)]
-pub struct GA {
-    max_generations: usize,
-    mutation_rate: f64,
-    crossover_rate: f64,    
-    pub population: Vec<Chromosome>,
-    bounds: Vec<(f64,f64)>, //bound for each chromosome
-    minimization: bool,
 }
 
 impl Chromosome {
@@ -47,7 +39,7 @@ impl Chromosome {
         return self.values.clone();
     }   
 
-    fn mutation(&mut self, mutation_rate: f64) {
+    fn mutation(&mut self, mutation_rate: f64, bounds: &Vec<Bound>) {
       
         let mut rng: ThreadRng = rand::thread_rng();
         let c_index: usize = rng.gen_range(0..self.values.len());
@@ -59,12 +51,18 @@ impl Chromosome {
       
             if p < 0.5 {
                 self.values[c_index] += self.mutation_percentage*self.values[c_index];
+                if self.values[c_index] > bounds[c_index].max {
+                    self.values[c_index] = bounds[c_index].max;
+                }
             }
             else {
                 self.values[c_index] -= self.mutation_percentage*self.values[c_index];
+                if self.values[c_index] < bounds[c_index].min {
+                    self.values[c_index] = bounds[c_index].min;
+                }
             }
-        }        
-    }       
+        }
+    }
 }
 
 impl fmt::Display for Chromosome {
@@ -78,10 +76,20 @@ impl fmt::Display for Chromosome {
       
         write!(f, "] ]\n")
     }    
+}
+
+#[derive(Debug,Clone,Default)]
+pub struct GA {
+    max_generations: usize,
+    mutation_rate: f64,
+    crossover_rate: f64,    
+    pub population: Vec<Chromosome>,
+    bounds: Vec<Bound>, //bound for each chromosome
+    minimization: bool,
 } 
 
 impl GA {
-    pub fn new(max: usize, mut_rate: f64, cross_rate: f64, bounds: Vec<(f64,f64)>, is_min: bool) -> Self {
+    pub fn new(max: usize, mut_rate: f64, cross_rate: f64, bounds: Vec<Bound>, is_min: bool) -> Self {
         Self {
             max_generations: max,
             mutation_rate: mut_rate,
@@ -97,17 +105,15 @@ impl GA {
         let mut rng = rand::thread_rng();
       
         for _i in 0..p_size {
+
             let mut values: Vec<f64> = vec![];
+
             for j in 0..c_size {
-                values.push(rng.gen_range(self.bounds[j].0..=self.bounds[j].1));
+                values.push(rng.gen_range(self.bounds[j].min..=self.bounds[j].max));
             }
             self.population.push(Chromosome::new(values));
         }
 
-    }
-
-    pub fn add_individual(&mut self, c: Chromosome){
-        self.population.push(c);
     }
 
     fn select_parents(&self) -> (&Chromosome,&Chromosome){ 
@@ -163,6 +169,7 @@ impl GA {
     }
     
     fn crossover(&self, parents: (&Chromosome,&Chromosome)) -> (Chromosome,Chromosome){
+
         let length: f64 = parents.0.values.len() as f64;
         let number_of_chromosomes: i32 = (self.crossover_rate * length) as i32;
         
@@ -176,26 +183,10 @@ impl GA {
         right_vec.append(&mut right_child_2.into());
         
         (Chromosome::new(left_vec),Chromosome::new(right_vec))
-    }    
-
-    fn verify_if_valid(&self, c: &Chromosome) -> bool {
-        let mut valid = true;
-        
-        let result: Vec<(&f64,&(f64,f64))> = 
-            c.values
-            .iter()
-            .zip(self.bounds.iter())
-            .filter(|(value, bound)| value < &&bound.0 && value > &&bound.1 )
-            .collect();
-        
-        if result.len() > 0 {
-            valid = false;
-        }
-        
-        return valid
     }
 
     fn compare(c1: &Chromosome, c2: &Chromosome) -> Ordering {
+        
         if c1.fitness < c2.fitness {
             Ordering::Less
         } 
@@ -214,7 +205,7 @@ impl GA {
         for j in 0..self.population.len() {
             self.population[j].fitness = fitness_function(&self.population[j].values);
         }
-
+        
         let mut i: usize = 0;
         let mut solutions: Vec<String> = vec![];
 
@@ -224,7 +215,7 @@ impl GA {
             let mut count: usize = 0;
             let mut p_size: usize = self.population.len();
 
-            for j in 0..(p_size/5) { 
+            for _j in 0..(p_size/5) { 
 
                 let parents: (&Chromosome,&Chromosome) = self.select_parents();                
         
@@ -238,20 +229,17 @@ impl GA {
         
                 count += 2;
             }
-            p_size = self.population.len();
 
-            //mutate and calculate fitness of each individual of new population
-            for j in 0..p_size {
+            p_size = self.population.len();
+                        
+            //mutate and calculate fitness of each individual of new population, except for the best two individuals
+            for id in 2..p_size {
                 
-                self.population[j].mutation(self.mutation_rate);
-        
-                self.population[j].fitness = fitness_function(&self.population[j].values);
+                self.population[id].mutation(self.mutation_rate, &self.bounds);
                 
-                if self.verify_if_valid(&self.population[j]) == false {
-                    self.population.remove(j);
-                }
-            }
-            
+                self.population[id].fitness = fitness_function(&self.population[id].values);
+            }   
+
             quicksort_by(&mut self.population, GA::compare);
 
             //get the best individual
@@ -261,7 +249,7 @@ impl GA {
         
                 for k in 0..count {
                     self.population.remove(p_size-1-k);
-                }                                
+                }
             }
             else {
         
@@ -271,9 +259,13 @@ impl GA {
                     self.population.remove(k);
                 }
             }
+            
             solutions.push(best.to_string());
             
+            //p_size = self.population.len();
+            //println!("p_size = {:?}", p_size);
             println!("current best is {:?}", best); 
+
             i += 1;
         }
         
