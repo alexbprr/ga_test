@@ -1,15 +1,21 @@
 mod core;
-use core::model::{create_ode_system};
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
+use std::io::Write;
+use std::io::BufReader;
 use core::ParameterEstimation;
 use core::json::{load_json, save_json, Argument, Bound, ConfigData, Metadata};
-use crate::core::model::{State};
 
 use std::env;
+
+use crate::core::model::create_ode_system;
+use crate::core::model::State;
 fn main(){
     env::set_var("RUST_BACKTRACE", "1");
     
     let metadata = Metadata {name: String::from("Parameter estimation"), start_time: 0.0, 
-        delta_time: 0.01, end_time: 20.0, population_size: 80, crossover_rate: 0.5, mutation_rate: 0.7};
+        delta_time: 0.001, end_time: 10.0, population_size: 80, crossover_rate: 0.5, mutation_rate: 0.7};
     
     let mut arguments: Vec<Argument> = vec![];
     arguments.push(Argument::new(String::from("S"), 1000.0));
@@ -20,9 +26,9 @@ fn main(){
     arguments.push(Argument::new(String::from("gamma"), 0.15));
 
     let mut config_bounds = vec![];
-    config_bounds.push(Bound::new(String::from("alpha"),0.001, 1.0));
-    config_bounds.push(Bound::new(String::from("beta"),0.001, 1.0));
-    config_bounds.push(Bound::new(String::from("gamma"),0.001, 1.0));
+    config_bounds.push(Bound::new(String::from("alpha"),0.1, 1.0));
+    config_bounds.push(Bound::new(String::from("beta"),0.001, 0.1));
+    config_bounds.push(Bound::new(String::from("gamma"),0.1, 1.0));
 
     let _ = save_json(ConfigData { metadata: metadata, arguments: arguments, bounds: config_bounds}, 
             "./src/config/ga_input.json");
@@ -32,8 +38,16 @@ fn main(){
         Err(e) => {println!("Error caused by {:?}", e); return},
     };
 
-    let mut ode_system = create_ode_system(String::from("I = beta*S*I - alpha*I \n 
-    R = alpha*I - gamma*R \n S = -beta*S*I + gamma*R"), &config_data);
+    let input_buffer: &mut String = &mut String::from("");
+    let file: File = match File::open("./src/tests/sir.txt") {
+        Ok(f) => f,
+        Err(e) => {println!("Error! {:?}", e); return;},
+    };
+    let mut reader: BufReader<File> = BufReader::new(file);
+    reader.read_to_string(input_buffer).unwrap();
+
+    //let mut ode_system = create_ode_system(String::from("I = beta*S*I - alpha*I \n R = alpha*I - gamma*R \n S = -beta*S*I + gamma*R"), &config_data);
+    let mut ode_system = create_ode_system(input_buffer.to_string(), &config_data);
     println!("ODEs: {:#?}", ode_system);
 
     let y: State = State::from_vec(ode_system.equations.keys()
@@ -41,7 +55,7 @@ fn main(){
     //println!("{:#?}", ode_system.solve(y));
     
     let mut test: ParameterEstimation = ParameterEstimation::new( 
-        String::from("./src/tests/sir_data.csv"), config_data, 50);    
+        String::from("./src/tests/sir_data.csv"), config_data, 30);
     test.estimate_parameters(&mut ode_system);
     
 }

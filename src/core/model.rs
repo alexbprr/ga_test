@@ -88,7 +88,7 @@ pub fn create_ode_system(input: String, config_data: &ConfigData) -> OdeSystem {
         ode_system.context.set_var(&arg.name, arg.value);
     }
     
-    let lines = input.split("\n").collect::<Vec<_>>(); //to do: testar trim 
+    let lines = input.split("\n").collect::<Vec<_>>(); 
 
     for line in lines {
         let new_line = 
@@ -143,6 +143,9 @@ pub fn save(times: &Vec<f64>, states: &Vec<State>, filename: &Path) {
 
     // Write time and state vector in csv format
     for (i, state) in states.iter().enumerate() {
+        if i >= times.len() {
+            break;
+        }
         buf.write_fmt(format_args!("{:.6}", times[i])).unwrap();
         for val in state.iter() {
             buf.write_fmt(format_args!(", {}", val)).unwrap();

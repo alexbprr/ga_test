@@ -233,7 +233,7 @@ impl GA {
             p_size = self.population.len();
                         
             //mutate and calculate fitness of each individual of new population, except for the best two individuals
-            for id in 2..p_size {
+            for id in p_size+count..p_size {
                 
                 self.population[id].mutation(self.mutation_rate, &self.bounds);
                 
