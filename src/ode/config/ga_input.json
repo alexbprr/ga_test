@@ -6,7 +6,8 @@
     "end_time": 60.0,
     "population_size": 80,
     "crossover_rate": 0.5,
-    "mutation_rate": 0.7
+    "mutation_rate": 0.8,
+    "max_iterations": 50
   },
   "arguments": [
     {

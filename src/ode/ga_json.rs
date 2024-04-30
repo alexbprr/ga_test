@@ -11,6 +11,7 @@ pub struct GA_Metadata {
     pub population_size: usize,
     pub crossover_rate: f64,
     pub mutation_rate: f64,
+    pub max_iterations: usize,
 }
 
 //initial condition 

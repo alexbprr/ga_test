@@ -8,7 +8,7 @@ fn main(){
     env::set_var("RUST_BACKTRACE", "1");
     
     let metadata = GA_Metadata {name: String::from("Parameter estimation"), start_time: 0.0, 
-        delta_time: 0.1, end_time: 60.0, population_size: 80, crossover_rate: 0.5, mutation_rate: 0.7};
+        delta_time: 0.1, end_time: 60.0, population_size: 80, crossover_rate: 0.5, mutation_rate: 0.8, max_iterations: 50};
     
     let mut arguments: Vec<GA_Argument> = vec![];
     arguments.push(GA_Argument::new(String::from("N"), 1.));
@@ -23,7 +23,7 @@ fn main(){
             "./src/ode/config/ga_input.json");
     
     let mut param_estimator: ParameterEstimation = ParameterEstimation::new( 
-        String::from("./src/ode/tests/logistic_data.csv"), 50);
+        String::from("./src/ode/tests/logistic_data.csv"));
     let mut ode_system = param_estimator.ode_system("./src/ode/config/ga_input.json", "./src/ode/tests/logistic.txt");
     param_estimator.estimate_parameters(&mut ode_system);
     

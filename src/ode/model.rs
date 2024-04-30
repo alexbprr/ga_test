@@ -25,6 +25,7 @@ impl OdeSystem {
     }
 
     pub fn get_argument_value(&self, name: String) -> f64{
+        
         for arg in self.config_data.arguments.iter() {
             if arg.name == name {
                 return arg.value
@@ -46,14 +47,12 @@ impl OdeSystem {
     pub fn update_context_with_state(&mut self, y: &State) {
 
         self.equations
-                .values_mut()
+                .iter_mut()
                 .zip(y.iter())
-                .for_each(|(current_value, new_value)| 
-                    (*current_value).1 = *new_value);
-        
-        for (name, expr) in self.equations.iter(){
-            self.context.set_var(name, expr.1);
-        }
+                .for_each(|(map, new_value)| {
+                    map.1.1 = *new_value;
+                    self.context.set_var(map.0, *new_value);
+                });
     }
 }
 
@@ -62,7 +61,6 @@ impl ode_solvers::System<f64, State> for OdeSystem {
     fn system(&mut self, _t: f64, y: &State, dydt: &mut State) {
         
         self.update_context_with_state(y);
-        //println!("context: {:#?}", self.context);
 
         let mut i: usize = 0;
         for (equation, _value) in self.equations.values() {            
@@ -83,7 +81,7 @@ pub fn solve(ode_system: &mut OdeSystem, y: &State) -> Vec<State> {
 
     let mut solver = 
             Dop853::new(
-                (*ode_system).clone(), 
+                ode_system.clone(), 
                 t_ini,
                 t_final,
                 dt,

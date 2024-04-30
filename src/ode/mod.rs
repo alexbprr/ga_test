@@ -16,20 +16,18 @@ pub struct ParameterEstimation {
     best_solution: Vec<f64>,
     data_file: String,
     config_data: ConfigData, 
-    max_num_iterations: usize,
 }
 
 //TO DO: create a thread to optimize the parameters values 
 //the config input file can not be changed during execution of this ga instance
 impl ParameterEstimation {
 
-    pub fn new(file_name: String, max_iter: usize) -> Self {
+    pub fn new(file_name: String) -> Self {
         Self {
             ga: GA::default(),
             best_solution: vec![],
             data_file: file_name,
             config_data: ConfigData::default(),
-            max_num_iterations: max_iter,
         }
     }
 
@@ -61,7 +59,7 @@ impl ParameterEstimation {
                 }                
 
                 self.ga = GA::new(
-                    self.max_num_iterations, 
+                    self.config_data.metadata.max_iterations, 
                     self.config_data.metadata.mutation_rate, 
                     self.config_data.metadata.crossover_rate, 
                     self.config_data.bounds.clone(),
@@ -71,12 +69,7 @@ impl ParameterEstimation {
                 self.ga.generate_random_population(
                     self.config_data.metadata.population_size, 
                     self.config_data.bounds.len()
-                );
-
-                let y: State = State::from_vec(ode_system.equations.keys()
-                            .map(|k| ode_system.get_argument_value(k.to_string())).collect());
-
-                ode_system.update_context_with_state(&y);
+                );                
 
                 let mut indexes: Vec<usize> = vec![];
                 for label in csv_data.labels.iter() {
@@ -88,13 +81,18 @@ impl ParameterEstimation {
                         pop_index += 1;
                     }
                 }
+
+                let y: State = State::from_vec(ode_system.equations.keys()
+                        .map(|k| ode_system.get_argument_value(k.to_string())).collect());
+
+                ode_system.update_context_with_state(&y);
             
                 match self.ga.optimize( |values: &Vec<f64>| {  
                
 
                     let mut errors: Vec<f64> = vec![0.0; csv_data.labels.len()];                 
                     
-                    ode_system.update_context(values);
+                    ode_system.update_context(values);                    
 
                     //println!("context: {:#?}", ode_system.context);
                     

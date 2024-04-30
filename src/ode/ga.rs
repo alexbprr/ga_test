@@ -50,15 +50,20 @@ impl Chromosome {
         if p < mutation_rate {
       
             p = rng.gen_range(0.0..=1.0);
+
+            let mut temp_value = self.mutation_percentage*self.values[c_index];
+            if temp_value > 1. {
+                temp_value = 1.;
+            }
       
             if p < 0.5 {
-                self.values[c_index] += self.mutation_percentage*self.values[c_index];
+                self.values[c_index] += temp_value;
                 if self.values[c_index] > bounds[c_index].max {
                     self.values[c_index] = bounds[c_index].max;
                 }
             }
             else {
-                self.values[c_index] -= self.mutation_percentage*self.values[c_index];
+                self.values[c_index] -= temp_value;
                 if self.values[c_index] < bounds[c_index].min {
                     self.values[c_index] = bounds[c_index].min;
                 }
@@ -226,6 +231,7 @@ impl GA {
 
             println!("iteration {:?}: ", i);            
             let mut p_size: usize = self.population.len();
+            //println!("p_size is {:?}", p_size); 
 
             for _j in 0..(p_size/4) { 
 
@@ -245,7 +251,7 @@ impl GA {
             let count: usize = p_newsize - p_size;
             p_size = p_newsize;
             //mutate and calculate fitness of each individual of new population
-            for id in 2..p_size {
+            for id in 5..p_size {
                 
                 self.population[id].mutation(self.mutation_rate, &self.bounds);
                 
@@ -273,7 +279,7 @@ impl GA {
             }
             
             solutions.push(best.to_string());            
-            println!("current best is {:?}", best); 
+            println!("current best is {:?}", best);             
 
             i += 1;
         }
